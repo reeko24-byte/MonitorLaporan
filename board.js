@@ -76,13 +76,32 @@
     $('gate').hidden = false;
     if (text) $('gate-text').textContent = text;
     $('gate-form').hidden = form === false;
+    if (form !== false) setTimeout(function () { $('gate-pin').focus(); }, 50);
   }
+
+  /* The PIN is sent once (POST, text/plain: no preflight); the answer is the board key, kept on this PC. */
   $('gate-form').addEventListener('submit', function (e) {
     e.preventDefault();
-    var k = $('gate-key').value.trim().replace(/^.*#k=/, '');
-    if (!k) return;
-    store('monitorKey', k);
-    location.reload();
+    var pin = $('gate-pin').value.replace(/\s/g, '');
+    var err = $('gate-error'), go = $('gate-go');
+    if (!pin) { err.textContent = 'Ketik PIN dulu.'; return; }
+    go.disabled = true;
+    go.textContent = 'Memeriksa…';
+    err.textContent = '';
+    fetch(CFG.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ login: pin }),
+      credentials: 'omit', referrerPolicy: 'no-referrer' })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (res && res.ok && res.key) { store('monitorKey', res.key); location.reload(); return; }
+        var code = res && res.error;
+        err.textContent = code === 'locked' ? 'Terlalu banyak PIN salah. Coba lagi dalam ' + (res.minutes || 10) + ' menit.'
+          : code === 'pin' ? 'PIN salah.' + (res.left ? ' Sisa ' + res.left + ' kali sebelum dikunci 10 menit.' : '')
+          : code === 'nopin' ? 'PIN belum dibuat. Jalankan newBoardPin() di Apps Script.'
+          : 'Server menjawab tidak biasa: ' + (code || 'kosong');
+        $('gate-pin').select();
+      })
+      .catch(function () { err.textContent = 'Tidak bisa menghubungi server. Periksa internet, lalu coba lagi.'; })
+      .then(function () { go.disabled = false; go.textContent = 'Masuk'; });
   });
 
   var key = '';
@@ -648,7 +667,7 @@
         if (token !== loading) return;
         var a = res[0], b = res[1];
         if (!a || !a.ok) {
-          if (a && a.error === 'key') { store('monitorKey', null); gate('Kunci papan tidak cocok atau sudah diganti. Buka tautan papan yang baru.'); return; }
+          if (a && a.error === 'key') { store('monitorKey', null); gate('Papan perlu PIN lagi (kuncinya baru diganti). Masukkan PIN papan.'); return; }
           throw new Error(a && a.error || 'jawaban kosong');
         }
         view.notes = a.notes || [];
@@ -715,6 +734,13 @@
       document.documentElement.dataset.theme = t;
       store('monitorTheme', t);
     });
+    $('logout').addEventListener('click', function () {
+      if (DEMO) return;
+      if (!confirm('Keluar dari papan di PC ini? Untuk masuk lagi perlu PIN.')) return;
+      store('monitorKey', null);
+      location.reload();
+    });
+    $('logout').hidden = DEMO;
     $('full').addEventListener('click', function () {
       if (document.fullscreenElement) document.exitFullscreen();
       else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();

@@ -100,6 +100,9 @@ button, a, summary { touch-action: manipulation; }
 .gate-row input { flex: 1; min-width: 0; height: 46px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--surface-2);
   color: var(--ink); padding: 0 12px; font: 500 16px var(--font); }
 .gate-row button { height: 46px; border: 0; border-radius: 10px; padding: 0 18px; background: var(--leaf); color: #0F2A12; font-weight: 700; cursor: pointer; }
+.gate-row input.pin { font: 700 26px var(--display); letter-spacing: .35em; text-align: center; height: 54px; }
+.gate-row input.pin + button { height: 54px; }
+.gate-error { min-height: 1.4em; margin: 10px 0 0 !important; color: var(--alarm-ink) !important; font-weight: 600; font-size: 14px; }
 .gate-foot { margin: 18px 0 0 !important; font-size: 14px; }
 .gate-foot a { color: var(--leaf-ink); }
 
