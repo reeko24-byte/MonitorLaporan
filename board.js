@@ -28,8 +28,16 @@
   function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
-  function hhmm(d) { return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
-  function hhmmss(d) { return hhmm(d) + ':' + pad(d.getSeconds()); }
+  /* Times through Intl (24-hour, WIB as the PC shows it), joined with ':' like the app's captions and Excel. */
+  var TIME = new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+  function timeParts(d) {
+    var p = {};
+    TIME.formatToParts(d).forEach(function (x) { p[x.type] = x.value; });
+    return p;
+  }
+  function hhmm(d) { var p = timeParts(d); return p.hour + ':' + p.minute; }
+  function hhmmss(d) { var p = timeParts(d); return p.hour + ':' + p.minute + ':' + p.second; }
+  var DAY = new Intl.DateTimeFormat('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   function dur(ms) { var m = Math.max(0, Math.floor(ms / 60000)); return m < 60 ? m + ' m' : Math.floor(m / 60) + ' j ' + pad(m % 60) + ' m'; }
   function icon(id) { return '<svg aria-hidden="true"><use href="#' + id + '"/></svg>'; }
   function title(s) { return String(s).charAt(0) + String(s).slice(1).toLowerCase(); }
@@ -97,7 +105,7 @@
         err.textContent = code === 'locked' ? 'Terlalu banyak PIN salah. Coba lagi dalam ' + (res.minutes || 10) + ' menit.'
           : code === 'pin' ? 'PIN salah.' + (res.left ? ' Sisa ' + res.left + ' kali sebelum dikunci 10 menit.' : '')
           : code === 'nopin' ? 'PIN belum dibuat. Jalankan newBoardPin() di Apps Script.'
-          : 'Server menjawab tidak biasa: ' + (code || 'kosong');
+          : 'Server menjawab tidak biasa (' + (code || 'kosong') + '). Coba lagi; bila terus muncul, periksa deployment Apps Script (README, "When something is wrong").';
         $('gate-pin').select();
       })
       .catch(function () { err.textContent = 'Tidak bisa menghubungi server. Periksa internet, lalu coba lagi.'; })
@@ -133,7 +141,7 @@
     return { date: v.date, shift: ORDER[i] };
   }
   function same(a, b) { return a && b && a.date === b.date && a.shift === b.shift; }
-  function longDay(day) { return title(SA.longDate(SA.parseDate(day)).split(', ')[0]) + ', ' + SA.longDate(SA.parseDate(day)).split(', ')[1].toLowerCase().replace(/\b\w/g, function (c) { return c.toUpperCase(); }); }
+  function longDay(day) { return DAY.format(SA.parseDate(day)); }     // "Senin, 23 November 2026"
 
   /* ------------------------------------------------------------------ model */
 
@@ -245,6 +253,7 @@
 
   function unitCell(name, team) {
     var box = el('div', 'unit');
+    box.setAttribute('translate', 'no');            // post, patrol and people's names: never auto-translated
     box.appendChild(el('b', '', esc(name)));
     var a = el('span'), b = el('span');
     box.appendChild(a);
@@ -338,7 +347,9 @@
     if (s === 'sent') { html = icon('i-ok') + hhmm(first.when); label += 'masuk ' + hhmm(first.when); }
     else if (s === 'late') { html = hhmm(first.when) + '<em>telat ' + dur(first.when - it.due) + '</em>'; label += 'masuk ' + hhmm(first.when) + ', telat'; }
     else if (s === 'wait') { html = icon('i-wait') + '<em>' + dur(it.due.getTime() + GRACE - now) + ' lagi</em>'; label += 'menunggu'; }
-    else if (s === 'miss') { html = icon('i-no') + '<em>+' + dur(now - it.due) + '</em>'; label += 'belum dikirim, lewat ' + dur(now - it.due); }
+    // live: how late so far; a past shift: just that it never came (hours since then mean nothing)
+    else if (s === 'miss' && view.live) { html = icon('i-no') + '<em>+' + dur(now - it.due) + '</em>'; label += 'belum dikirim, lewat ' + dur(now - it.due); }
+    else if (s === 'miss') { html = icon('i-no') + '<em>tidak masuk</em>'; label += 'tidak masuk'; }
     else label += 'belum waktunya';
     var fresh = s === 'miss' && now - it.due - GRACE < 10 * 60000;     // red for under ten minutes: it pulses
     var node = cells[it.id];
@@ -454,7 +465,7 @@
     var badge = $('alert-n');
     badge.textContent = groups.length;
     badge.classList.toggle('zero', groups.length === 0);
-    var sig = groups.map(function (g) { return g.unit + (g.it ? g.it.id : g.list.length) + Math.floor((now - g.due) / 60000); }).join(',') + view.zone;
+    var sig = groups.map(function (g) { return g.unit + (g.it ? g.it.id : g.list.length) + Math.floor((now - g.due) / 60000); }).join(',') + view.zone + view.live;
     if (painted.alerts === sig) return;
     painted.alerts = sig;
 
@@ -471,7 +482,7 @@
         : g.it.label;
       var b = el('button');
       b.type = 'button';
-      b.innerHTML = '<b>' + esc(g.unit) + '</b><span class="late">+' + dur(now - g.due) + '</span>' +
+      b.innerHTML = '<b translate="no">' + esc(g.unit) + '</b><span class="late">' + (view.live || g.previous ? '+' + dur(now - g.due) : 'tidak masuk') + '</span>' +
         (g.previous ? '<span class="prevshift">Shift ' + esc(title(g.m.v.shift)) + ' (sebelumnya)</span>' : '') +
         '<span>' + esc(what) + '</span>' +
         '<span>Petugas: ' + esc(u.crew.length ? u.crew.map(shortName).join(', ') : 'tidak diketahui') + ' · ' + esc(g.zone.replace(' Area', '')) + '</span>';
@@ -501,7 +512,7 @@
     list.innerHTML = '';
     if (!got.length) { list.appendChild(el('li', '', '<span class="empty">Belum ada laporan di shift ini.</span>')); return; }
     got.forEach(function (n) {
-      list.appendChild(el('li', '', '<time>' + hhmm(n.when) + '</time><b>' + esc(n.unitName) + '</b><span>' +
+      list.appendChild(el('li', '', '<time>' + hhmm(n.when) + '</time><b translate="no">' + esc(n.unitName) + '</b><span translate="no">' +
         esc(noteLabel(n)) + (n.by ? ' · ' + esc(n.by) : '') + '</span>'));
     });
   }
@@ -535,24 +546,36 @@
     if (btn) btn.addEventListener('click', goLive);
   }
 
-  /* The sweep: the centre of column c is the shift's start + c hours; between centres it moves with the clock. */
+  /* The sweep: the centre of column c is the shift's start + c hours; between centres it moves with the
+     clock. The column centres are MEASURED only when the layout changes (build, resize, zone, fonts);
+     every second only a transform is written -- no layout read in the paint. */
+  var sweep = null;
+  function measureSweep() {
+    var head = document.querySelector('#sec-security .sec-head');
+    var a0 = head && head.querySelector('.axis[data-col="0"]'), a8 = head && head.querySelector('.axis[data-col="8"]');
+    if (!a0 || !a0.offsetParent) { sweep = null; return; }
+    var box = $('boards').getBoundingClientRect(), r0 = a0.getBoundingClientRect(), r8 = a8.getBoundingClientRect();
+    var c0 = r0.left + r0.width / 2 - box.left, c8 = r8.left + r8.width / 2 - box.left;
+    sweep = { c0: c0, c8: c8, step: (c8 - c0) / 8 };
+    lastCol = null;
+  }
+  var lastCol = null, lastStep = null;
   function placeNow(m, now) {
     var line = $('now');
     var on = view.live && now >= m.w.start - 30 * 60000 && now <= m.w.end.getTime() + GRACE;
-    var head = document.querySelector('#sec-security .sec-head');
-    var a0 = head && head.querySelector('.axis[data-col="0"]'), a8 = head && head.querySelector('.axis[data-col="8"]');
-    if (!on || !a0 || !a0.offsetParent) { line.hidden = true; return; }
-    line.hidden = false;
-    var box = $('boards').getBoundingClientRect(), r0 = a0.getBoundingClientRect(), r8 = a8.getBoundingClientRect();
-    var c0 = r0.left + r0.width / 2 - box.left, c8 = r8.left + r8.width / 2 - box.left, stepPx = (c8 - c0) / 8;
-    var x = c0 + ((now - m.w.start) / HOUR) * stepPx;
-    x = Math.max(c0 - stepPx / 2, Math.min(c8 + stepPx / 2, x));
-    line.style.left = x.toFixed(1) + 'px';
-    document.documentElement.style.setProperty('--step', Math.round(Math.min(stepPx, x - (c0 - stepPx / 2))) + 'px');
+    if (!on || !sweep) { if (!line.hidden) line.hidden = true; return; }
+    if (line.hidden) line.hidden = false;
+    var x = sweep.c0 + ((now - m.w.start) / HOUR) * sweep.step;
+    x = Math.max(sweep.c0 - sweep.step / 2, Math.min(sweep.c8 + sweep.step / 2, x));
+    line.style.transform = 'translateX(' + x.toFixed(1) + 'px)';
+    var wake = Math.round(Math.min(sweep.step, x - (sweep.c0 - sweep.step / 2)));
+    if (wake !== lastStep) { lastStep = wake; document.documentElement.style.setProperty('--step', wake + 'px'); }
     var label = hhmm(now);
     if ($('now-label').textContent !== label) $('now-label').textContent = label;
     var col = Math.round((now - m.w.start) / HOUR);
-    document.querySelectorAll('.axis.now-col').forEach(function (a) { if (Number(a.dataset.col) !== col) a.classList.remove('now-col'); });
+    if (col === lastCol) return;
+    lastCol = col;
+    document.querySelectorAll('.axis.now-col').forEach(function (a) { a.classList.remove('now-col'); });
     document.querySelectorAll('.sec-head .axis[data-col="' + col + '"]').forEach(function (a) { a.classList.add('now-col'); });
   }
 
@@ -575,7 +598,25 @@
   /* Photos: each note lists its uploaded copies [{no, id}]; the picture itself is fetched only when a
      pop-up shows it, and kept for the session. The phone sends them after the note, so a report can be
      green with its photos still on the way. */
-  var photoCache = {};
+  /* Kept for the session, but only the last PHOTO_KEEP: the wall board stays open for days. A Map keeps
+     insertion order, so the first key is the oldest. */
+  var PHOTO_KEEP = 60;
+  var photoCache = new Map();
+  function cachedPhoto(id) {
+    if (photoCache.has(id)) {
+      var hit = photoCache.get(id);
+      photoCache.delete(id);
+      photoCache.set(id, hit);                      // used again: now the newest
+      return hit;
+    }
+    var got = api.photo(id).then(function (res) {
+      if (!res || !res.ok) throw new Error(res && res.error || 'foto');
+      return 'data:' + (res.type || 'image/jpeg') + ';base64,' + res.data;
+    });
+    photoCache.set(id, got);
+    while (photoCache.size > PHOTO_KEEP) photoCache.delete(photoCache.keys().next().value);
+    return got;
+  }
   function photoStrip(hits) {
     var all = [];
     hits.forEach(function (h) { (h.photos || []).forEach(function (p) { all.push({ id: p.id, no: p.no, by: h.by, when: h.when }); }); });
@@ -589,21 +630,22 @@
     var body = $('dlg-body');
     body.querySelectorAll('[data-photo]').forEach(function (b) {
       var id = b.getAttribute('data-photo');
-      b.addEventListener('click', function () { b.classList.toggle('big'); });
-      var got = photoCache[id] || (photoCache[id] = api.photo(id).then(function (res) {
-        if (!res || !res.ok) throw new Error(res && res.error || 'foto');
-        return 'data:' + (res.type || 'image/jpeg') + ';base64,' + res.data;
-      }));
-      got.then(function (src) {
+      b.addEventListener('click', function () {
+        b.classList.toggle('big');
+        b.setAttribute('aria-expanded', String(b.classList.contains('big')));
+      });
+      b.setAttribute('aria-expanded', 'false');
+      cachedPhoto(id).then(function (src) {
         if (!b.isConnected) return;
         b.innerHTML = '';
-        var img = new Image();
+        var img = new Image(4, 3);                      // the tile's 4:3 box is reserved by CSS (aspect-ratio)
         img.alt = b.getAttribute('aria-label');
+        img.decoding = 'async';
         img.src = src;
         b.appendChild(img);
       }).catch(function () {
-        delete photoCache[id];
-        if (b.isConnected) b.innerHTML = '<span class="ph-wait">Gagal memuat</span>';
+        photoCache.delete(id);
+        if (b.isConnected) b.innerHTML = '<span class="ph-wait">Gagal memuat — tutup lalu buka lagi untuk mencoba</span>';
       });
     });
   }
@@ -619,7 +661,7 @@
         p.push([i ? 'Masuk lagi' : 'Masuk', hhmmss(h.when) + (i === 0 && s === 'late' ? ' (telat ' + dur(h.when - it.due) + ')' : '') +
           '<br><span style="font-weight:500;color:var(--ink-2)">' + esc(h.by || 'pelapor tidak diketahui') + '</span>']);
       });
-    } else if (s === 'miss') p.push(['Terlambat', dur(now - it.due) + ' dari jadwal']);
+    } else if (s === 'miss') p.push(view.live ? ['Terlambat', dur(now - it.due) + ' dari jadwal'] : ['Hasil', 'Tidak masuk sampai sekarang']);
     p.push(['Petugas', crewOf(m, it.unit)]);
     p.push(['ARCO ' + esc(it.zone.replace(' Area', '')), esc(arcoOf(it.zone)).replace(' · ', '<br>')]);
     var note = s === 'miss' ? '<p class="dlg-note">Belum ada catatan di server. Bisa jadi HP petugas belum dapat sinyal — catatan yang tertahan masuk sendiri begitu HP online dan aplikasinya dibuka.</p>' : '';
@@ -675,6 +717,7 @@
         view.prevV = prevV;
         view.okAt = Date.now();
         view.err = null;
+        blip();
         paint();
       })
       .catch(function (e) {
@@ -685,19 +728,32 @@
       });
   }
 
+  /* The live dot blinks once each time new data arrives: motion that means something, never a loop. */
+  function blip() {
+    var dot = document.querySelector('#live i');
+    if (!dot) return;
+    dot.classList.remove('blip');
+    void dot.offsetWidth;
+    dot.classList.add('blip');
+  }
+
   function setView(v, live) {
     var changed = !same(v, view.v);
     view.v = v;
     view.live = live;
     $('live').setAttribute('aria-pressed', String(live));
-    $('next').disabled = same(v, currentView());
     var sh = SA.shiftById(v.shift);
     $('shift-name').textContent = 'Shift ' + title(v.shift) + ' · ' + pad(sh.start) + '.00 – ' + pad(sh.end % 24) + '.00';
     $('shift-date').textContent = longDay(v.date);
+    $('pick-date').value = v.date;
+    $('pick-date').max = currentView().date;
+    $('pick-shift').value = v.shift;
+    syncUrl();
     if (changed) {
       view.notes = null;
       view.prevNotes = null;
       build(model(v, [], M.now()));
+      measureSweep();
       $('now').classList.remove('moving');
       load().then(function () { setTimeout(function () { $('now').classList.add('moving'); }, 700); });
     }
@@ -705,6 +761,58 @@
   }
 
   function goLive() { setView(currentView(), true); paint(); }
+
+  /* The shift picked in the header: the current one (or later) is the live board. */
+  function pickView() {
+    var date = $('pick-date').value, shift = $('pick-shift').value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || ORDER.indexOf(shift) < 0) return;
+    var v = { date: date, shift: shift }, now = currentView();
+    var later = date > now.date || (date === now.date && ORDER.indexOf(shift) >= ORDER.indexOf(now.shift));
+    if (later) goLive(); else setView(v, false);
+  }
+
+  /* The address carries what is on screen (?tgl=2026-11-20&shift=PAGI&zona=South), so a past shift can
+     be bookmarked or sent; no tgl = the live board. */
+  function syncUrl() {
+    if (!view.v) return;
+    var q = new URLSearchParams(location.search);
+    ['tgl', 'shift', 'zona'].forEach(function (k) { q.delete(k); });
+    if (!view.live) { q.set('tgl', view.v.date); q.set('shift', view.v.shift); }
+    if (view.zone) q.set('zona', view.zone.replace(' Area', ''));
+    var s = q.toString().replace(/=(&|$)/g, '$1');     // "?demo" stays "?demo", not "?demo="
+    history.replaceState(null, '', location.pathname + (s ? '?' + s : '') + location.hash);
+  }
+  function viewFromUrl() {
+    var q = new URLSearchParams(location.search);
+    var zona = q.get('zona');
+    if (zona === 'South' || zona === 'North') view.zone = zona + ' Area';
+    var date = q.get('tgl'), shift = (q.get('shift') || '').toUpperCase();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date || '') && ORDER.indexOf(shift) >= 0) {
+      var now = currentView();
+      if (date < now.date || (date === now.date && ORDER.indexOf(shift) < ORDER.indexOf(now.shift))) return { date: date, shift: shift };
+    }
+    return null;
+  }
+
+  function refreshNow() {
+    var b = $('refresh');
+    if (b.disabled) return;
+    b.disabled = true;
+    b.classList.add('busy');
+    b.setAttribute('aria-label', 'Memuat data…');
+    painted = {};
+    load().then(function () {
+      b.disabled = false;
+      b.classList.remove('busy');
+      b.setAttribute('aria-label', 'Muat ulang data');
+    });
+  }
+
+  /* The browser bar's colour follows the page (dark / light). */
+  function themeColour() {
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = getComputedStyle(document.documentElement).getPropertyValue('--page').trim() || '#08110C';
+  }
 
   /* ------------------------------------------------------------------ controls */
 
@@ -719,20 +827,21 @@
         view.zone = b.dataset.zone;
         store('monitorZone', view.zone || null);
         applyZone();
+        measureSweep();
+        syncUrl();
         painted = {};
         paint();
       });
     });
-    $('prev').addEventListener('click', function () { setView(step(view.v, -1), false); });
-    $('next').addEventListener('click', function () {
-      var n = step(view.v, 1);
-      if (same(n, currentView())) goLive(); else setView(n, false);
-    });
+    $('pick-date').addEventListener('change', pickView);
+    $('pick-shift').addEventListener('change', pickView);
     $('live').addEventListener('click', goLive);
+    $('refresh').addEventListener('click', refreshNow);
     $('theme').addEventListener('click', function () {
       var t = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
       document.documentElement.dataset.theme = t;
       store('monitorTheme', t);
+      themeColour();
     });
     $('logout').addEventListener('click', function () {
       if (DEMO) return;
@@ -745,7 +854,12 @@
       if (document.fullscreenElement) document.exitFullscreen();
       else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
     });
-    window.addEventListener('resize', function () { if (current) placeNow(current, M.now()); });
+    // any change in the board's size (window, zoom, side panel, fonts arriving) moves the columns:
+    // measure again then, and only then
+    var remeasure = function () { measureSweep(); if (current) placeNow(current, M.now()); };
+    if (window.ResizeObserver) new ResizeObserver(remeasure).observe($('sec-security'));
+    window.addEventListener('resize', remeasure);
+    if (document.fonts) document.fonts.ready.then(remeasure);
     document.addEventListener('visibilitychange', function () { if (!document.hidden && view.v) load(); });
     document.querySelectorAll('.grace').forEach(function (g) { g.textContent = CFG.GRACE_MIN; });
   }
@@ -765,8 +879,10 @@
     $('lists-note').textContent = source === 'app' ? '' : source === 'fallback'
       ? 'Daftar pos dan titik: salinan (aplikasi tidak bisa dibuka dari APP_URL).'
       : 'Daftar pos dan titik: salinan dari aplikasi v58 (23 Nov 2026).';
+    themeColour();
+    var fromUrl = viewFromUrl();
     wire();
-    setView(currentView(), true);
+    setView(fromUrl || currentView(), !fromUrl);
 
     setInterval(function () {
       if (view.live && !same(view.v, currentView())) setView(currentView(), true);

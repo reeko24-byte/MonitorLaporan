@@ -21,7 +21,7 @@
   <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
   <symbol id="i-prev" viewBox="0 0 24 24"><path d="M14.5 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="i-next" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/><path d="M19.8 3.8v4.4h-4.4" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5l9.5 16.5h-19z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M12 10v4.5M12 17.4v.1" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
   <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" fill="none" stroke="currentColor" stroke-width="2.2"/></symbol>
   <symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
@@ -36,7 +36,7 @@
     <form id="gate-form" novalidate>
       <label for="gate-pin">PIN papan</label>
       <div class="gate-row">
-        <input id="gate-pin" class="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="12"
+        <input id="gate-pin" name="pin" class="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="12"
           spellcheck="false" aria-describedby="gate-error" required>
         <button type="submit" id="gate-go">Masuk</button>
       </div>
@@ -47,23 +47,33 @@
 </div>
 
 <div class="app" id="app" hidden>
+  <a class="skip" href="#boards">Langsung ke papan</a>
   <header class="top">
-    <div class="brand">
+    <div class="brand" translate="no">
       <img src="favicon.svg" alt="" width="40" height="40">
       <div>
         <h1>Monitor Laporan</h1>
-        <p>Security Officer &amp; Patrol · PT Prabhu</p>
+        <p>Security Officer &amp; Patrol · PT&nbsp;Prabhu</p>
       </div>
     </div>
 
     <nav class="shiftnav" aria-label="Pilih shift">
-      <button type="button" id="prev" class="iconbtn" aria-label="Shift sebelumnya"><svg><use href="#i-prev"/></svg></button>
       <div class="shiftname">
-        <b id="shift-name">Shift</b>
+        <b id="shift-name" translate="no">Shift</b>
         <span id="shift-date"></span>
       </div>
-      <button type="button" id="next" class="iconbtn" aria-label="Shift berikutnya"><svg><use href="#i-next"/></svg></button>
-      <button type="button" id="live" class="livebtn" aria-pressed="true"><i></i><span>Langsung</span></button>
+      <div class="pickers">
+        <label class="sr-only" for="pick-date">Tanggal shift</label>
+        <input type="date" id="pick-date" name="tgl" autocomplete="off">
+        <label class="sr-only" for="pick-shift">Shift</label>
+        <select id="pick-shift" name="shift">
+          <option value="MALAM">Malam · 00–08</option>
+          <option value="PAGI">Pagi · 08–16</option>
+          <option value="SORE">Sore · 16–24</option>
+        </select>
+        <button type="button" id="live" class="livebtn" aria-pressed="true"><i></i><span>Langsung</span></button>
+        <button type="button" id="refresh" class="iconbtn refresh" aria-label="Muat ulang data" title="Muat ulang data"><svg aria-hidden="true" focusable="false"><use href="#i-refresh"/></svg></button>
+      </div>
     </nav>
 
     <div class="clock">
@@ -71,18 +81,18 @@
       <span id="conn" class="conn"><i></i><span id="conn-text">Menyambung…</span></span>
     </div>
     <div class="topbtns">
-      <button class="iconbtn" id="full" type="button" aria-label="Layar penuh" title="Layar penuh"><svg><use href="#i-full"/></svg></button>
-      <button class="iconbtn" id="theme" type="button" aria-label="Ganti mode terang / gelap" title="Mode terang / gelap"><svg><use href="#i-moon"/></svg></button>
-      <button class="iconbtn" id="logout" type="button" aria-label="Keluar dari papan di PC ini" title="Keluar (PC ini akan minta PIN lagi)"><svg><use href="#i-lock"/></svg></button>
+      <button class="iconbtn" id="full" type="button" aria-label="Layar penuh" title="Layar penuh"><svg aria-hidden="true" focusable="false"><use href="#i-full"/></svg></button>
+      <button class="iconbtn" id="theme" type="button" aria-label="Ganti mode terang / gelap" title="Mode terang / gelap"><svg aria-hidden="true" focusable="false"><use href="#i-moon"/></svg></button>
+      <button class="iconbtn" id="logout" type="button" aria-label="Keluar dari papan di PC ini" title="Keluar (PC ini akan minta PIN lagi)"><svg aria-hidden="true" focusable="false"><use href="#i-lock"/></svg></button>
     </div>
   </header>
 
   <div class="banner" id="banner" hidden></div>
 
   <section class="tally" aria-label="Ringkasan shift">
-    <div class="t miss"><span class="ico"><svg><use href="#i-no"/></svg></span><b id="n-miss">0</b><span>belum<br>dikirim</span></div>
-    <div class="t wait"><span class="ico"><svg><use href="#i-wait"/></svg></span><b id="n-wait">0</b><span>menunggu<br>(&le; <span class="grace">30</span> menit)</span></div>
-    <div class="t sent"><span class="ico"><svg><use href="#i-ok"/></svg></span><b id="n-sent">0</b><span>terkirim<br><em id="n-late"></em></span></div>
+    <div class="t miss"><span class="ico"><svg aria-hidden="true" focusable="false"><use href="#i-no"/></svg></span><b id="n-miss">0</b><span>belum<br>dikirim</span></div>
+    <div class="t wait"><span class="ico"><svg aria-hidden="true" focusable="false"><use href="#i-wait"/></svg></span><b id="n-wait">0</b><span>menunggu<br>(&le;&nbsp;<span class="grace">30</span>&nbsp;menit)</span></div>
+    <div class="t sent"><span class="ico"><svg aria-hidden="true" focusable="false"><use href="#i-ok"/></svg></span><b id="n-sent">0</b><span>terkirim<br><em id="n-late"></em></span></div>
     <div class="t future"><b id="n-future">0</b><span>belum<br>waktunya</span></div>
     <p class="sr-only" role="status" aria-atomic="true" id="status-line"></p>
     <div class="zones" role="group" aria-label="Pilih area">
@@ -93,7 +103,7 @@
   </section>
 
   <main class="layout">
-    <div class="boards" id="boards">
+    <div class="boards" id="boards" tabindex="-1">
       <div class="now" id="now" hidden><span id="now-label"></span></div>
       <section class="sec" id="sec-security" aria-label="Security Officer"></section>
       <section class="sec" id="sec-patrol" aria-label="Patrol"></section>
@@ -111,10 +121,10 @@
       <details class="panel key" open>
         <summary><h2>Keterangan</h2></summary>
         <div class="keylist">
-          <div><span class="cell s-sent"><svg><use href="#i-ok"/></svg></span> Tersimpan di aplikasi, dengan jamnya</div>
+          <div><span class="cell s-sent"><svg aria-hidden="true" focusable="false"><use href="#i-ok"/></svg></span> Tersimpan di aplikasi, dengan jamnya</div>
           <div><span class="cell s-late"><em>telat</em></span> Masuk, tapi lewat <span class="grace">30</span> menit dari jadwal</div>
-          <div><span class="cell s-wait"><svg><use href="#i-wait"/></svg></span> Sudah jadwalnya, masih dalam <span class="grace">30</span> menit</div>
-          <div><span class="cell s-miss"><svg><use href="#i-no"/></svg></span> Lewat <span class="grace">30</span> menit, belum ada laporan</div>
+          <div><span class="cell s-wait"><svg aria-hidden="true" focusable="false"><use href="#i-wait"/></svg></span> Sudah jadwalnya, masih dalam <span class="grace">30</span> menit</div>
+          <div><span class="cell s-miss"><svg aria-hidden="true" focusable="false"><use href="#i-no"/></svg></span> Lewat <span class="grace">30</span> menit, belum ada laporan</div>
           <div><span class="cell s-future"></span> Belum waktunya</div>
           <div><span class="pip"><i class="s-sent"></i><i></i></span> Titik patroli: atas Berangkat, bawah Kembali</div>
           <div><span class="pip rawan"><i></i><i></i></span> Garis oranye di bawah: titik rawan</div>
@@ -133,7 +143,7 @@
 <dialog id="detail" aria-labelledby="dlg-title">
   <div class="dlg-head">
     <div><h3 id="dlg-title"></h3><p id="dlg-sub"></p></div>
-    <button type="button" id="dlg-close" class="iconbtn" aria-label="Tutup"><svg><use href="#i-close"/></svg></button>
+    <button type="button" id="dlg-close" class="iconbtn" aria-label="Tutup"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
   </div>
   <div class="dlg-body" id="dlg-body"></div>
 </dialog>
